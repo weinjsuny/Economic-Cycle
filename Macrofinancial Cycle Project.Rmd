@@ -1,0 +1,124 @@
+---
+title: "Economic Cycle Project"
+author: "Jun Wen"
+date: "October 27, 2016"
+output: html_document
+---
+
+In the following study:
+
+“Òscar Jordà, Moritz Schularick, and Alan M. Taylor. 2017. “Macrofinancial History and the New Business Cycle Facts.” in NBER Macroeconomics Annual 2016, volume 31, edited by Martin Eichenbaum and Jonathan A. Parker. Chicago: University of Chicago Press."
+
+the researchers aim to provide convenient no-cost open access under a license to the most extensive long-run macro-financial dataset to date. The database covers 17 advanced economies since 1870 on an annual basis. It comprises 25 real and nominal variables such as bank credit to the non-financial private sector, mortgage lending and long-term house prices. The database captures the near-universe of advanced-country macroeconomic and asset price dynamics, covering on average over 90 percent of advanced-economy output and over 50 percent of world output.
+
+In this project we will use machine learing algorithm to predict the economic cycle, natural fluctuation of the economy between periods of expansion (growth) and contraction (recession).
+
+The data for this project can be downloaded from this original source: http://www.macrohistory.net/data/.
+
+## Getting and Cleaning the Data
+Factors such as gross domestic product (GDP), interest rates, levels of employment and consumer spending can help to determine the current stage of the economic cycle. 
+
+An economic growth rate is a measure of economic growth from one period to another in percentage terms. The economic growth rate provides insight into the general direction and magnitude of growth for the overall economy.
+
+In the first part of project, we plan to predict the rising or falling of two consecutive annual growth rates. If an economy experiences two consecutive years with falling growth rates, it can be said that the associated economy is falling into a recession.
+
+
+```{r, warning=FALSE, message=FALSE}
+set.seed(1)
+library(dplyr)
+library(ggplot2)
+library(gdata)
+setwd("/Users/junwen/Documents/Project_Incubator/Data")
+df <- read.xls ("JSTdatasetR1.xlsx", sheet = 2, header = TRUE)
+df <- subset(df, iso == "USA")
+df$gdp_change <- c(NA, diff(log(df$gdp)))
+df$stock_change <- c(NA, diff(log(df$stocks)))
+df$gdp_rate_change <- c(diff(df$gdp_change), NA)
+rownames(df) <- 1:nrow(df)
+df <- df[-c(2:4)]
+```
+
+Because there is a large anount of missing values, we will firstly fill the missimg values by the median of columns. 
+
+```{r, warning=FALSE, message=FALSE}
+library(caret)
+f = function(x){
+   if (sum(is.na(x)) >= length(x)*0.6) {
+     x <- 0
+   }
+   x[is.na(x)] = median(x, na.rm = TRUE) 
+   x
+}
+df <- data.frame(apply(df, 2, f))
+dim(df)
+df <- df[!(apply(df == 0, 2, all))]
+nzv_cols <- nearZeroVar(df)
+if(length(nzv_cols) > 0) df <- df[, -nzv_cols]
+dim(df)
+```
+
+## Exploratory analysis and statistical inference
+One of interesting question is how stock market change would impact the economic growth rate. We want to compare the mean of growth rate change between two groups, one with positive stock market change and the other with negative change. 
+
+```{r, warning=FALSE, message=FALSE}
+boxplot(gdp_rate_change ~ as.factor(stock_change > 0), df, 
+        xlab= "Stock market growing", ylab = "GDP growth rate change")
+```
+
+We can not use the paired t interval as the groups are independent. Now let’s do a t interval comparing groups. We’ll show the two intervals, one assuming that the variances are equal and one assuming otherwise.
+
+```{r, warning=FALSE, message=FALSE}
+t.test(gdp_rate_change ~ as.factor(stock_change > 0), paired = FALSE, var.equal = FALSE, data = df)
+```
+
+The confidence interval of t-test does not contain zero. Based on this result we can assume that the average economic growth rate increases with the stock market growth, and therefore the null hypothesis can be rejected.
+
+## Using machine learning to evaluate the data
+
+```{r, warning=FALSE, message=FALSE}
+inTraining <- createDataPartition(y=df$gdp, p=0.75, list=FALSE)
+myTraining <- df[inTraining, ]
+myTesting <- df[-inTraining, ]
+
+myTraining$gdp_rate_change <- factor(as.numeric(myTraining$gdp_rate_change > 0))
+myTesting$gdp_rate_change <- factor(as.numeric(myTesting$gdp_rate_change > 0))
+```
+
+### Random forests
+A random forest is an ensemble learning approach to supervised learning. The algorithm for a random forest involes sampling cases and variables to create a large number of decision trees. Each case is classified by each decision tree. The most common classification for that case is then used as the outcome. Random forests are grown using the randomForest() function in the randomForest package.
+
+```{r, warning=FALSE, message=FALSE}
+library(randomForest)
+fit.forest <- randomForest(gdp_rate_change ~., data = myTraining, 
+                           na.action = na.roughfix, importance = TRUE)
+fit.forest
+forest.pred <- predict(fit.forest, myTesting)
+forest.perf <- table(myTesting$gdp_rate_change, forest.pred, 
+                  dnn= c("Actual", "Predicted"))
+confusionMatrix(forest.perf)
+```
+
+### Boosted tree model and parameter tuning
+The accuracy of a predictive model can be improved using boosting algorithms like gradient boosting. The first step is tuning the model. Currently, k-fold cross-validation, leave-one-out cross-validation and bootstrap resampling methods can be used by train.
+
+```{r, warning=FALSE, message=FALSE}
+library(gbm)
+fitControl <- trainControl(method = "repeatedcv",
+                           number = 10,
+                           repeats = 10)
+fit.gbm <- train(gdp_rate_change ~., data = myTraining, 
+                 method = "gbm", 
+                 trControl = fitControl, 
+                 verbose = FALSE)
+fit.gbm
+gbm.pred <- predict(fit.gbm, myTesting)
+gbm.perf <- table(myTesting$gdp_rate_change, gbm.pred, 
+                  dnn = c("Actual", "Predicted"))
+confusionMatrix(gbm.perf)
+```
+
+##Further Questions
+
+1.Economic growth can be spurred by a variety of factors or occurrences. Most commonly, increases in aggregate demand encourage a corresponding increase in overall output that brings in a new source of income. Technological advancements and new product developments can exert positive influences on economic growth. Increases in demand, or availability, in foreign markets that result in higher exports can also have positive influences. I will look specific variables pertain to the question to improve the prediction.
+
+2.An economic cycle, also referred to as the business cycle, has four stages: expansion, peak, contraction and trough. I plan to use unsupervised learning algorithms to classify each period of the cycle. 
