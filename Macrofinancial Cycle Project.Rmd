@@ -11,7 +11,7 @@ In the following study:
 
 the researchers aim to provide convenient no-cost open access under a license to the most extensive long-run macro-financial dataset to date. The database covers 17 advanced economies since 1870 on an annual basis. It comprises 25 real and nominal variables such as bank credit to the non-financial private sector, mortgage lending and long-term house prices. The database captures the near-universe of advanced-country macroeconomic and asset price dynamics, covering on average over 90 percent of advanced-economy output and over 50 percent of world output.
 
-In this project we will use machine learing algorithm to predict the economic cycle, natural fluctuation of the economy between periods of expansion (growth) and contraction (recession).
+In this project we will use machine learning algorithm to predict the economic cycle, natural fluctuation of the economy between periods of expansion (growth) and contraction (recession).
 
 The data for this project can be downloaded from this original source: http://www.macrohistory.net/data/.
 
@@ -33,12 +33,16 @@ df <- read.xls ("JSTdatasetR1.xlsx", sheet = 2, header = TRUE)
 df <- subset(df, iso == "USA")
 df$gdp_change <- c(NA, diff(log(df$gdp)))
 df$stock_change <- c(NA, diff(log(df$stocks)))
+df$import_change <- c(NA, diff(log(df$imports)))
+df$export_change <- c(NA, diff(log(df$exports)))
+df$revenue_change <- c(NA, diff(log(df$revenue)))
+df$expenditure_change <- c(NA, diff(log(df$expenditure)))
 df$gdp_rate_change <- c(diff(df$gdp_change), NA)
 rownames(df) <- 1:nrow(df)
 df <- df[-c(2:4)]
 ```
 
-Because there is a large anount of missing values, we will firstly fill the missimg values by the median of columns. 
+Because there is a large amount of missing values, we will firstly fill the missing values by the median of columns. 
 
 ```{r, warning=FALSE, message=FALSE}
 library(caret)
@@ -73,6 +77,25 @@ t.test(gdp_rate_change ~ as.factor(stock_change > 0), paired = FALSE, var.equal 
 
 The confidence interval of t-test does not contain zero. Based on this result we can assume that the average economic growth rate increases with the stock market growth, and therefore the null hypothesis can be rejected.
 
+Similarly, we can investigate whether the revenue growth would impact positively on the economic growth rate change. 
+
+```{r, warning=FALSE, message=FALSE}
+boxplot(gdp_rate_change ~ as.factor(revenue_change > 0), df, 
+        xlab= "Revenue growing", ylab = "GDP growth rate change")
+t.test(gdp_rate_change ~ as.factor(revenue_change > 0), paired = FALSE, var.equal = FALSE, data = df)
+```
+
+The confidence interval of t-test does not contain zero. Based on this result we can assume that the average economic growth rate increases with the revenue decay, and therefore the null hypothesis can be rejected.
+
+```{r, warning=FALSE, message=FALSE}
+boxplot(gdp_rate_change ~ as.factor(expenditure_change > 0), df, 
+        xlab= "Expenditure growing", ylab = "GDP growth rate change")
+t.test(gdp_rate_change ~ as.factor(expenditure_change > 0), paired = FALSE, var.equal = FALSE, data = df)
+```
+
+However, since the confidence interval of the test contains zero we can say that expenditure growth seems to have no
+impact on economic growth rate change based on this test.
+
 ## Using machine learning to evaluate the data
 
 ```{r, warning=FALSE, message=FALSE}
@@ -85,7 +108,7 @@ myTesting$gdp_rate_change <- factor(as.numeric(myTesting$gdp_rate_change > 0))
 ```
 
 ### Random forests
-A random forest is an ensemble learning approach to supervised learning. The algorithm for a random forest involes sampling cases and variables to create a large number of decision trees. Each case is classified by each decision tree. The most common classification for that case is then used as the outcome. Random forests are grown using the randomForest() function in the randomForest package.
+A random forest is an ensemble learning approach to supervised learning. The algorithm for a random forest involves sampling cases and variables to create a large number of decision trees. Each case is classified by each decision tree. The most common classification for that case is then used as the outcome. Random forests are grown using the randomForest() function in the randomForest package.
 
 ```{r, warning=FALSE, message=FALSE}
 library(randomForest)
@@ -99,7 +122,7 @@ confusionMatrix(forest.perf)
 ```
 
 ### Boosted tree model and parameter tuning
-The accuracy of a predictive model can be improved using boosting algorithms like gradient boosting. The first step is tuning the model. Currently, k-fold cross-validation, leave-one-out cross-validation and bootstrap resampling methods can be used by train.
+The accuracy of a predictive model can be improved using boosting algorithms like gradient boosting. The first step is tuning the model. Currently, k-fold cross-validation, leave-one-out cross-validation and bootstrap re-sampling methods can be used by train.
 
 ```{r, warning=FALSE, message=FALSE}
 library(gbm)
@@ -117,7 +140,7 @@ gbm.perf <- table(myTesting$gdp_rate_change, gbm.pred,
 confusionMatrix(gbm.perf)
 ```
 
-##Further Questions
+## Further Questions
 
 1.Economic growth can be spurred by a variety of factors or occurrences. Most commonly, increases in aggregate demand encourage a corresponding increase in overall output that brings in a new source of income. Technological advancements and new product developments can exert positive influences on economic growth. Increases in demand, or availability, in foreign markets that result in higher exports can also have positive influences. I will look specific variables pertain to the question to improve the prediction.
 
